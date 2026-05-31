@@ -1,135 +1,104 @@
-name: CI + Deploy to Vercel
+name: CI and Deploy to Vercel
 
-  # Triggers: every push to main, every PR targeting main
-    on:
+on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
 
 env:
-  # Vercel project credentials — set these in:
-      # GitHub repo > Settings > Secrets and variables > Actions
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
-  # ─────────────────────────────────────────
-      # Job 1: Type-check + lint + build
-          # ─────────────────────────────────────────
-          ci:
-    name: Type Check & Build
-          runs-on: ubuntu-latest
-
-                steps:
+  ci:
+    name: Type Check and Build
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout code
-                uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
-                        - name: Setup Node.js 20
-                                  uses: actions/setup-node@v4
-                                            with:
-                                              node-version: '20'
-                                              cache: 'npm'
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
-                                                      - name: Install dependencies
-                                                                run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-                                                                        - name: Type check
-                                                                                  run: npx tsc --noEmit
+      - name: Type check
+        run: npx tsc --noEmit
 
-                                                                                          - name: Lint
-                                                                                                    run: npm run lint
-                                                                                                      
-                                                                                                            - name: Build (verify it compiles)
-                                                                                                                      run: npm run build
-                                                                                                                                env:
-          # Build needs a placeholder — real key is only needed at runtime
-                      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'sk-ant-placeholder-for-build' }}
+      - name: Lint
+        run: npm run lint
 
-  # ─────────────────────────────────────────
-      # Job 2: Deploy preview (PRs only)
-          # ─────────────────────────────────────────
-          deploy-preview:
+      - name: Build
+        run: npm run build
+        env:
+          ANTHROPIC_API_KEY: placeholder-for-build-step
+
+  deploy-preview:
     name: Deploy Preview
-          runs-on: ubuntu-latest
-                needs: ci
-                      if: github.event_name == 'pull_request'
-
-                      steps:
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'pull_request'
+    steps:
       - name: Checkout code
-                uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
-                        - name: Setup Node.js 20
-                                  uses: actions/setup-node@v4
-                                            with:
-                                              node-version: '20'
-                                              cache: 'npm'
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
-                                                      - name: Install dependencies
-                                                                run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-                                                                        - name: Install Vercel CLI
-                                                                                  run: npm install -g vercel@latest
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
 
-                                                                                          - name: Pull Vercel environment info
-                                                                                                    run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Build project for Vercel
-                run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Build for Vercel
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy preview to Vercel
-                id: deploy
-                          run: |
-                                      DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
-                                      echo "deploy_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+      - name: Deploy preview
+        id: deploy
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "deploy_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
-                                  - name: Comment preview URL on PR
-                                            uses: actions/github-script@v7
-                                                      with:
-                                                        script: |
-                                                                      github.rest.issues.createComment({
-                                                                                      issue_number: context.issue.number,
-                                                                                      owner: context.repo.owner,
-                                                                                      repo: context.repo.repo,
-                                                                                      body: `## 🚀 Preview Deployment\n\n**URL:** ${{ steps.deploy.outputs.deploy_url }}\n\n> Deployed from commit \`${context.sha.substring(0, 7)}\``
-                                                                      })
-
-                                                            # ─────────────────────────────────────────
-                                                            # Job 3: Deploy production (main branch)
-                                                                # ─────────────────────────────────────────
-                                                                deploy-production:
+  deploy-production:
     name: Deploy Production
-          runs-on: ubuntu-latest
-                needs: ci
-                      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-                      steps:
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
       - name: Checkout code
-                uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
-                        - name: Setup Node.js 20
-                                  uses: actions/setup-node@v4
-                                            with:
-                                              node-version: '20'
-                                              cache: 'npm'
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
-                                                      - name: Install dependencies
-                                                                run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-                                                                        - name: Install Vercel CLI
-                                                                                  run: npm install -g vercel@latest
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
 
-                                                                                          - name: Pull Vercel environment info
-                                                                                                    run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Build project for Vercel
-                run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Build for Vercel
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to production
-                id: deploy
-                          run: |
-                                      DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
-                                      echo "deploy_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
-
-                                  - name: Print production URL
-                                            run: echo "✅ Deployed to production ${{ steps.deploy.outputs.deploy_url }}"
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
